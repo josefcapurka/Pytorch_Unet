@@ -5,7 +5,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 from torch.utils.data import Dataset
 
 
@@ -57,7 +58,6 @@ class BasicDataset(Dataset):
         name = self.ids[idx]
         mask_file = list(self.masks_dir.glob(name + self.mask_suffix + '.*'))
         img_file = list(self.images_dir.glob(name + '.*'))
-
         assert len(img_file) == 1, f'Either no image or multiple images found for the ID {name}: {img_file}'
         assert len(mask_file) == 1, f'Either no mask or multiple masks found for the ID {name}: {mask_file}'
         mask = self.load(mask_file[0])
@@ -65,8 +65,9 @@ class BasicDataset(Dataset):
 
         assert img.size == mask.size, \
             f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
-
+        # 3, 640, 959
         img = self.preprocess(img, self.scale, is_mask=False)
+        # # 640, 959
         mask = self.preprocess(mask, self.scale, is_mask=True)
 
         return {
@@ -77,4 +78,5 @@ class BasicDataset(Dataset):
 
 class CarvanaDataset(BasicDataset):
     def __init__(self, images_dir, masks_dir, scale=1):
-        super().__init__(images_dir, masks_dir, scale, mask_suffix='_mask')
+        # super().__init__(images_dir, masks_dir, scale, mask_suffix='_mask')
+        super().__init__(images_dir, masks_dir, scale, mask_suffix='')
