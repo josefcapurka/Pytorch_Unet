@@ -10,7 +10,7 @@ import wandb
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-from torch.autograd import Variable
+# from torch.autograd import Variable
 
 from utils.data_loading import FSDataset
 from utils.dice_score import dice_loss
@@ -18,14 +18,19 @@ from evaluate import evaluate
 from unet import UNet
 import os
 from torchvision import transforms
-os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+# os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+dataset_dir = Path('/home/capurjos/unet_dataset/synthetic_dataset')
+# dataset_dir = Path('/home/capurjos/big_dataset_w_fsoco')
+# dataset_dir = Path('/home/capurjos/big_dataset_without_czech')
 
-dataset_dir = Path('/home/capurjos/big_dataset_w_fsoco')
+
 # dataset_dir = Path('/home/capurjos/Pytorch-UNet/cropped_imgs_raw')
 # dataset_dir = Path('/home/capurjos/data')
 dir_checkpoint = Path('./checkpoints/')
 # TODO https://stackoverflow.com/questions/61808965/pytorch-runtimeerror-element-0-of-tensors-does-not-require-grad-and-does-not-ha
 torch.set_grad_enabled(True)
+# torch.backends.cudnn.benchmark = True
+# torch.backends.cudnn.deterministic = True
 
 
 # def connectivity_loss(output):
@@ -36,6 +41,7 @@ torch.set_grad_enabled(True)
 #     erosion = F.erosion2d(output, kernel, padding=1)
 #     dilation = F.dilation2d(output, kernel, padding=1)
 #     return torch.mean((dilation - erosion) ** 2)
+# TODO assert for when mask doesnt contain labels 0, 1, ..3
 def connectivity_loss(output):
     """
     Computes the connectivity loss for a binary segmentation mask.
@@ -96,7 +102,7 @@ def piecewise_loss(output, target):
 def train_net(net,
               device,
               epochs: int = 5,
-              batch_size: int = 12,
+              batch_size: int = 1,
               learning_rate: float = 1e-3,
               val_percent: float = 0.1,
               save_checkpoint: bool = True,
@@ -110,12 +116,12 @@ def train_net(net,
     n_val = int(len(dataset) * val_percent)
     n_train = len(dataset) - n_val
     # generator - random number generator
-    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(2))
+    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(247))
     # train_mean, train_variance = FSDataset.compute_mean_and_variance(train_subset=train_set)
     # print(train_set.mean())
     # FSDataset.set_normalization_transformation(train_mean, train_variance)
     # 3. Create Pytorch data loaders
-    loader_args = dict(batch_size=batch_size, num_workers=4, pin_memory=True)
+    loader_args = dict(batch_size=batch_size, num_workers=1, pin_memory=False)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     # print(train_loader[:,:,0])
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
@@ -125,7 +131,7 @@ def train_net(net,
     experiment.config.update(dict(epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
                                   val_percent=val_percent, save_checkpoint=save_checkpoint, img_scale=img_scale,
                                   amp=amp))
-
+    print(f"batch size is {batch_size}")
     logging.info(f'''Starting training:
         Epochs:          {epochs}
         Batch size:      {batch_size}
@@ -187,6 +193,7 @@ def train_net(net,
                 with torch.cuda.amp.autocast(enabled=amp):
                     true_masks = F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float()
                     masks_pred = net(images)
+                    print("-----------------------------")
                     # _, masks_pred = torch.max(masks_pred, dim=1).to_float()
                     # TODO?  https://stackoverflow.com/questions/57798033/valueerror-target-size-torch-size16-must-be-the-same-as-input-size-torch
                     # _, masks_pred = torch.max(masks_pred, 1)

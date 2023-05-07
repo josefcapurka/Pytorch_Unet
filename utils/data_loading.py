@@ -120,12 +120,16 @@ class FSDataset(Dataset):
         """
         # rescale image
         # print(pil_img.size)
+        # TODO uncomment, only for synthetic data!!!!
+        pil_img = pil_img.crop((0, 300, 1280, 720))
+        # if is_mask == False:
+        #     pil_img = pil_img.convert('RGB')
         pil_img = pil_img.resize((512, 384), resample=Image.NEAREST if is_mask else Image.BICUBIC)
         w, h = pil_img.size
 
         # pil_img = pil_img.crop((0, 90, w, h))
         # TODO
-        # pil_img = pil_img.convert('RGB')
+        pil_img = pil_img.convert('RGB')
         # w, h = pil_img.size
         newW, newH = int(scale * w), int(scale * h)
         assert newW > 0 and newH > 0, 'Scale is too small, resized images would have no pixel'
@@ -155,18 +159,22 @@ class FSDataset(Dataset):
         #     path = os.path.join(folder, str(random.randint(0, 100)) + ".png")
             # cv2.imwrite(path, detected_output)
         img_ndarray = np.asarray(pil_img)
+        img_ndarray = img_ndarray.copy()
+        # print(f"origin shape is {img_ndarray.shape}")
         try:
-            if img_ndarray.shape[2] == 4:
+            # TODO change. dont want to use single channel images..
+            if img_ndarray.shape[2] == 4 or img_ndarray.shape[2] == 1:
                 pil_img = pil_img.convert('RGB')
                 img_ndarray = np.asarray(pil_img)
         except:
-            pass
+            print("error occured when trying to convert to rgb")
         if is_mask:
             # if len(img_ndarray.shape) > 1:
             try:
+                # TODO is this okay?? prob. yes
                 img_ndarray = img_ndarray[:, :, 0]
                 if np.all(img_ndarray == 0):
-                    print("image {0} contains only one label, not saving!".format(""))
+                    # print("image {0} contains only one label, not saving!".format(""))
                     return
             except:
                 pass
@@ -180,8 +188,11 @@ class FSDataset(Dataset):
         #     img_ndarray = np.asarray(image)
         # # TODO?
         if not is_mask:
+            # img_ndarray[img_ndarray==255] = 1
+            # TODO uncomment???
             if img_ndarray.ndim == 2:
                 img_ndarray = img_ndarray[np.newaxis, ...]
+                # print("new axis added")
             else:
                 img_ndarray = img_ndarray.transpose((2, 0, 1))
             # TODO!!!!!
@@ -208,7 +219,10 @@ class FSDataset(Dataset):
 
 
     def __getitem__(self, idx):
+        # print(f"image {self.filenames[idx]} loaded")
+        # print(f"current index is {idx}")
         name = self.filenames[idx]
+        # print(f"loading image {name}")
         mask_file = list(self.masks_dir.glob(name + '.*'))
         img_file = list(self.images_dir.glob(name + '.*'))
         assert len(img_file) == 1, f'Either no image or multiple images found for the image {name}: {img_file}'
@@ -220,8 +234,10 @@ class FSDataset(Dataset):
             f'Image and mask {name} should be the same size, but are {image.size} and {mask.size}'
         # TODO?? 3, 640, 959
         img = self.preprocess(image, self.scale, is_mask=False)
+        # print(f"shape of input image is {img.shape}")
         # # 640, 959
         mask = self.preprocess(mask, self.scale, is_mask=True)
+        # print(f"shape of input mask is {mask.shape}")
         # print(img.shape)
         # assert img.shape[0] == 420
 
@@ -229,5 +245,6 @@ class FSDataset(Dataset):
             'image': torch.as_tensor(img.copy()).float().contiguous(),
             'mask': torch.as_tensor(mask.copy()).long().contiguous()
         }
+        # print(f"loading image {name} was successful")
     
         return sample
