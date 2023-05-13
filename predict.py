@@ -23,9 +23,10 @@ def predict_img(net,
                 device,
                 scale_factor=1,
                 out_threshold=0.5,
-                evaluate_accuracy=False):
+                evaluate_accuracy=False,
+                synthetic=False):
     net.eval()
-    img = torch.from_numpy(FSDataset.preprocess(full_img, scale_factor, is_mask=False))
+    img = torch.from_numpy(FSDataset.preprocess(full_img, scale_factor, is_mask=False, synthetic=synthetic))
     img = img.unsqueeze(0)
     img = img.to(device=device, dtype=torch.float32)
 
@@ -73,6 +74,7 @@ def get_args():
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument("--directory", action="store", dest="directory", default="", required=True)
     parser.add_argument("--evaluate_accuracy", '-e', action='store_true')
+    # parser.add_argument("--synthetic", action='store_true', default=False)
 
     return parser.parse_args()
 
@@ -116,12 +118,11 @@ if __name__ == '__main__':
         print("folder {0} already exists".format(directory + "/" + "masks"))
         # exit(1)
 
-    print("cropping")
 
     size = (512, 384)
     print(f"Resizing masks to size {size}")
     fourcc = cv2.VideoWriter_fourcc(*"XVID")
-    width, height = 4000, 3000
+    width, height = 1280, 420
 
     # Create the output video writer
     out = cv2.VideoWriter("output_test.avi", fourcc, 5.0, (width, height))
@@ -135,19 +136,25 @@ if __name__ == '__main__':
         ])
     for i, filename in enumerate(os.listdir(directory)):
         # if i > 1000:
-        print(filename)
         #     break
-        if filename.endswith(".png") or filename.endswith(".jpg") == False:
+        if filename.endswith(".png") == False and filename.endswith(".jpg") == False:
             continue
         # filename = str(i) + ".png"
+        print(filename)
     # for i, filename in enumerate(in_files):
         logging.info(f'\nPredicting image {filename} ...')
         try:
-            img = Image.open(directory + "/" + filename)
+            img = Image.open(os.path.join(directory, filename))
+            # print(f"{os.path.join(directory, filename)}")
+            # print(11)
+            if img.size[0] == 1280 and img.size[1] == 720:
+                img = img.crop((0, 300, 1280, 720))
+                print(f"size of image before is {img.size}")
             # print(f"filename {filename} opened")
         except:
             print(f"cannot open file {filename}")
             continue
+
         # img = img.crop((0, 400, 1280, 720))
         # print(img.size)
         # TODO bicubic or nearest
@@ -175,7 +182,9 @@ if __name__ == '__main__':
             # print(result)
             # result = result.resize((1280, 320), Image.BICUBIC)
             # TODO bicubic or nearest??
+            print(f"result size is {result.size}")
             result = result.resize((width, height), Image.NEAREST)
+            print(f"result after is {result.size}")
 
             if args.evaluate_accuracy:
                 true_masks_dir = os.path.join(os.path.join(directory, '..'), "masks")
@@ -214,9 +223,11 @@ if __name__ == '__main__':
             img = Image.open(directory + "/" + filename).convert("RGB")
             # img = img.crop((0, 400, 1280, 720))
             img_arr = np.array(img, np.uint8)
+            if img_arr.shape[0] == 720 and img_arr.shape[1] == 1280:
+                img_arr = img_arr[300:, :, :]
             # img_arr = img_arr.transpose(1, 0, 2)
             result = np.array(result.convert("RGB"))
-            # print(f"img_arr shape is {img_arr.shape}, result mask shape is {result.shape}")
+            print(f"img_arr shape is {img_arr.shape}, result mask shape is {result.shape}")
 
             try:
                 overlay = cv2.addWeighted(img_arr, 1-opacity, np.array(result), opacity, 0)
@@ -234,13 +245,13 @@ if __name__ == '__main__':
             logging.info(f'Visualizing results for image {filename}, close to continue...')
             plot_img_and_mask(img, mask)
     out.release()
-
-    avg_time_per_frame = total_time / frames_processed
-    fps = 1 / avg_time_per_frame
-    fps2 = frames_processed / total_time
-    print("FPS:", fps)
-    print(f"FPS: {fps2}")
-    print(f"Average IoU is {iou / frames_processed}")
+    if args.evaluate_accuracy:
+        avg_time_per_frame = total_time / frames_processed
+        fps = 1 / avg_time_per_frame
+        fps2 = frames_processed / total_time
+        print("FPS:", fps)
+        print(f"FPS: {fps2}")
+        print(f"Average IoU is {iou / frames_processed}")
     # |=========================================+======================+======================|
     # |   0  Tesla V100-SXM2-32GB            On | 00000000:8A:00.0 Off |                    0 |
     # | N/A   29C    P0               43W / 300W|      0MiB / 32768MiB |      0%      Default |

@@ -16,11 +16,12 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class FSDataset(Dataset):
-    def __init__(self, dataset_dir: Path, transform=False, scale: float = 1.0):
+    def __init__(self, dataset_dir: Path, transform=False, scale: float = 1.0, synthetic:bool = False):
         self.images_dir = dataset_dir / Path("imgs")
         self.masks_dir = dataset_dir / Path("masks")
         self.save_dir = "home/capurjos/"
         self.scale = scale
+        self.synthetic = synthetic
         self.filenames = [splitext(file)[0] for file in listdir(self.images_dir) if not file.startswith('.')]
         if not self.filenames:
             raise RuntimeError(f'No input file found in {self.images_dir}, make sure you put your images there')
@@ -111,7 +112,7 @@ class FSDataset(Dataset):
 
 
     @staticmethod
-    def preprocess(pil_img, scale, is_mask):
+    def preprocess(pil_img, scale, is_mask, synthetic):
         """
         :param pil_img: input image - PIL object
         :param scale:
@@ -121,14 +122,15 @@ class FSDataset(Dataset):
         # rescale image
         # print(pil_img.size)
         # TODO uncomment, only for synthetic data!!!!
-        pil_img = pil_img.crop((0, 300, 1280, 720))
+        if synthetic:
+            pil_img = pil_img.crop((0, 300, 1280, 720))
         # if is_mask == False:
         #     pil_img = pil_img.convert('RGB')
         pil_img = pil_img.resize((512, 384), resample=Image.NEAREST if is_mask else Image.BICUBIC)
         w, h = pil_img.size
 
         # pil_img = pil_img.crop((0, 90, w, h))
-        # TODO
+        # TODO maybe not necessary
         pil_img = pil_img.convert('RGB')
         # w, h = pil_img.size
         newW, newH = int(scale * w), int(scale * h)
@@ -233,10 +235,10 @@ class FSDataset(Dataset):
         assert image.size == mask.size, \
             f'Image and mask {name} should be the same size, but are {image.size} and {mask.size}'
         # TODO?? 3, 640, 959
-        img = self.preprocess(image, self.scale, is_mask=False)
+        img = self.preprocess(image, self.scale, is_mask=False, synthetic=self.synthetic)
         # print(f"shape of input image is {img.shape}")
         # # 640, 959
-        mask = self.preprocess(mask, self.scale, is_mask=True)
+        mask = self.preprocess(mask, self.scale, is_mask=True, synthetic=self.synthetic)
         # print(f"shape of input mask is {mask.shape}")
         # print(img.shape)
         # assert img.shape[0] == 420
