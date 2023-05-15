@@ -29,7 +29,7 @@ torch.set_grad_enabled(True)
 # torch.backends.cudnn.benchmark = True
 # torch.backends.cudnn.deterministic = True
 
-sweep_configuration = {
+sweep_config = {
     'method': 'random',
     'name': 'sweep',
     'metric': {
@@ -38,8 +38,8 @@ sweep_configuration = {
         },
     'parameters': {
         'batch_size': {'values': [1, 2, 4, 8, 16, 32, 64]},
-        'epochs': {'values': [20, 30, 40]},
-        'lr': {'max': 0.1, 'min': 0.0001}
+        'epochs': {'values': [5]},
+        'lr': {'max': 0.001, 'min': 0.0001}
      }
 }
 
@@ -55,10 +55,11 @@ def train_net(net,
               amp: bool = False,
               synthetic:bool = False,
               pretrained:str = "",
-              test_optimizers:bool = False):
+              test_optimizers:bool = False,
+              experiment=None):
 
     # 1. Create dataset
-    if args.synthetic:
+    if synthetic:
         dataset_dir = Path('/home/capurjos/unet_dataset/synthetic_dataset')
         dir_checkpoint = Path('./synthetic_checkpoints/')
     else:
@@ -81,165 +82,164 @@ def train_net(net,
     # print(train_loader[:,:,0])
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
     # print("test--------------------")
-    if test_optimizers:
-        momentum = 0.999
-        optimizers = [#optim.Adagrad(net.parameters(), lr=0.01),
-                        # optim.Adadelta(net.parameters(), lr=1),
-                        # optim.Adam(net.parameters(), lr=learning_rate),
-                        optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum = momentum)]
+    # if test_optimizers:
+    #     momentum = 0.999
+    #     optimizers = [#optim.Adagrad(net.parameters(), lr=0.01),
+    #                     # optim.Adadelta(net.parameters(), lr=1),
+    #                     # optim.Adam(net.parameters(), lr=learning_rate),
+    #                     optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum = momentum)]
                         # optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum)]
     # (Initialize logging)
-    else:
-        optimizers = [optim.Adam(net.parameters(), lr=1e-3)]
-    for optimizer in optimizers:
-        print(f"Optimizer: {optimizer.__class__.__name__}")
-        experiment = wandb.init(project='U-Net', resume=False, anonymous='must')
-        experiment.config.update(dict(epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
-                                    val_percent=val_percent, save_checkpoint=save_checkpoint, img_scale=img_scale,
-                                    amp=amp))
-        print(f"batch size is {batch_size}")
-        logging.info(f'''Starting training:
-            Epochs:          {epochs}
-            Batch size:      {batch_size}
-            Learning rate:   {learning_rate}
-            Training size:   {n_train}
-            Validation size: {n_val}
-            Checkpoints:     {save_checkpoint}
-            Device:          {device.type}
-            Images scaling:  {img_scale}
-            Mixed Precision: {amp}
-        ''')
+    # else:
+    optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum = 0.999)
+    print(f"Optimizer: {optimizer.__class__.__name__}")
+    # wandb.login() #97c86e1f1123c953535f42d830e6e867b5128902
+    experiment.config.update(dict(epochs=epochs, batch_size=batch_size, learning_rate=learning_rate,
+                                val_percent=val_percent, save_checkpoint=save_checkpoint, img_scale=img_scale,
+                                amp=amp))
+    print(f"batch size is {batch_size}")
+    logging.info(f'''Starting training:
+        Epochs:          {epochs}
+        Batch size:      {batch_size}
+        Learning rate:   {learning_rate}
+        Training size:   {n_train}
+        Validation size: {n_val}
+        Checkpoints:     {save_checkpoint}
+        Device:          {device.type}
+        Images scaling:  {img_scale}
+        Mixed Precision: {amp}
+    ''')
 
-        # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-        # RMSprop is also adaptive optimizer
-        # optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
-        # hyperparameters used from here https://machinelearningmastery.com/adam-optimization-algorithm-for-deep-learning/
-        #optimizer = optim.Adam(net.parameters(), lr=1e-3) #, betas=[0.9, 0.999], eps=1e-8)
-        # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)  # goal: maximize Dice score
-        # TODO - scheduler from https://github.com/amirhosseinh77/UNet-AerialSegmentation/blob/main/train.py
-        scaler = torch.cuda.amp.GradScaler()
-        # TODO gradient clipping
-        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
-        # https://wandb.ai/wandb_fc/tips/reports/How-to-Use-GradScaler-in-PyTorch--VmlldzoyMTY5MDA5
-        # scaling factor for gradient
-        # grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
-        # weights = [1.0, 7.0]
-        # class_weights = torch.FloatTensor(weights).cuda()
-        #loss_function = nn.BCECrossEntropyLoss()#weight=class_weights)
-        # loss_function = nn.CrossEntropyLoss()
-        # loss_function = ErosionDilationPenaltyLoss(0.1, 3)
-        loss_function = nn.BCEWithLogitsLoss()
-        # loss_function = mIoULoss(n_classes=2).to(device)
-        # loss_function = FocalLoss(gamma=3/4).to(device)
-        # loss_function = nn.BCELoss()
-        # loss_function = nn.MSELoss()
-        # loss_function = nn.NLLLoss()
-        # loss_function = nn.HingeEmbeddingLoss()
-        # loss_function = nn.L1Loss()
-        global_step = 0
+    # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
+    # RMSprop is also adaptive optimizer
+    # optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
+    # hyperparameters used from here https://machinelearningmastery.com/adam-optimization-algorithm-for-deep-learning/
+    #optimizer = optim.Adam(net.parameters(), lr=1e-3) #, betas=[0.9, 0.999], eps=1e-8)
+    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)  # goal: maximize Dice score
+    # TODO - scheduler from https://github.com/amirhosseinh77/UNet-AerialSegmentation/blob/main/train.py
+    scaler = torch.cuda.amp.GradScaler()
+    # TODO gradient clipping
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+    # https://wandb.ai/wandb_fc/tips/reports/How-to-Use-GradScaler-in-PyTorch--VmlldzoyMTY5MDA5
+    # scaling factor for gradient
+    # grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
+    # weights = [1.0, 7.0]
+    # class_weights = torch.FloatTensor(weights).cuda()
+    #loss_function = nn.BCECrossEntropyLoss()#weight=class_weights)
+    # loss_function = nn.CrossEntropyLoss()
+    # loss_function = ErosionDilationPenaltyLoss(0.1, 3)
+    loss_function = nn.BCEWithLogitsLoss()
+    # loss_function = mIoULoss(n_classes=2).to(device)
+    # loss_function = FocalLoss(gamma=3/4).to(device)
+    # loss_function = nn.BCELoss()
+    # loss_function = nn.MSELoss()
+    # loss_function = nn.NLLLoss()
+    # loss_function = nn.HingeEmbeddingLoss()
+    # loss_function = nn.L1Loss()
+    global_step = 0
 
-        # 5. Begin training
-        for epoch in range(1, epochs+1):
-            net.train()
-            epoch_loss = 0
-            with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
-                for batch in train_loader:
-                    images = batch['image']
-                    true_masks = batch['mask']
+    # 5. Begin training
+    for epoch in range(1, epochs+1):
+        net.train()
+        epoch_loss = 0
+        with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
+            for batch in train_loader:
+                images = batch['image']
+                true_masks = batch['mask']
 
-                    assert images.shape[1] == net.n_channels, \
-                        f'Network has been defined with {net.n_channels} input channels, ' \
-                        f'but loaded images have {images.shape[1]} channels. Please check that ' \
-                        'the images are loaded correctly.'
+                assert images.shape[1] == net.n_channels, \
+                    f'Network has been defined with {net.n_channels} input channels, ' \
+                    f'but loaded images have {images.shape[1]} channels. Please check that ' \
+                    'the images are loaded correctly.'
 
-                    images = images.to(device=device, dtype=torch.float32)
-                    # x = torch.tensor([0,1])
-                    true_masks = true_masks.to(device=device)
-                    # forward pass
-                    with torch.cuda.amp.autocast(enabled=amp):
-                        true_masks = F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float()
-                        masks_pred = net(images)
-                        # _, masks_pred = torch.max(masks_pred, dim=1).to_float()
-                        # TODO?  https://stackoverflow.com/questions/57798033/valueerror-target-size-torch-size16-must-be-the-same-as-input-size-torch
-                        # _, masks_pred = torch.max(masks_pred, 1)
+                images = images.to(device=device, dtype=torch.float32)
+                # x = torch.tensor([0,1])
+                true_masks = true_masks.to(device=device)
+                # forward pass
+                with torch.cuda.amp.autocast(enabled=amp):
+                    true_masks = F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float()
+                    masks_pred = net(images)
+                    # _, masks_pred = torch.max(masks_pred, dim=1).to_float()
+                    # TODO?  https://stackoverflow.com/questions/57798033/valueerror-target-size-torch-size16-must-be-the-same-as-input-size-torch
+                    # _, masks_pred = torch.max(masks_pred, 1)
+                    # TODO
+                    # print(masks_pred[:, :, 84:, :].shape[2])
+                    # bottom_img_loss = loss_function(masks_pred[:, :, 84:, :], true_masks[:, :, 84:, :]) * 3
+                    # upper_img_loss = loss_function(masks_pred[:, :, 0:84, :], true_masks[:, :, 0:84, :])
+                    # print(masks_pred.shape)
+                    loss = loss_function(masks_pred, true_masks)
+                        #    + dice_loss(F.softmax(masks_pred, dim=1).float(),
+                        #                F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float(),
+                        #                multiclass=True)
+                    # loss = bottom_img_loss + upper_img_loss
+                    # loss = piecewise_loss(masks_pred.squeeze(1), true_masks.float())
+                    # loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
+                    # loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
+                    # loss += dice_loss(masks_pred, true_masks, multiclass=False)
+                    # print("loss on training data is: {0}".format(loss)) #\
+                    # + dice_loss(F.softmax(masks_pred, dim=1).float(),
+                    #         F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float(),
+                    #         multiclass=False)
+
+                optimizer.zero_grad()#set_to_none=True)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                # loss.backward()
+                # optimizer.step()
+                # a = grad_scaler.scale(loss)
+                # a.require_grad = True
+                # a.backward()
+                # grad_scaler.step(optimizer)
+                # grad_scaler.update()
+
+                pbar.update(images.shape[0])
+                global_step += 1
+                epoch_loss += loss.item()
+                experiment.log({
+                    'train loss': loss.item(),
+                    'step': global_step,
+                    'epoch': epoch
+                })
+                pbar.set_postfix(**{'loss (batch)': loss.item()})
+                # TODO??
+                # Evaluation round
+                division_step = (n_train // (10 * batch_size))
+                if division_step > 0:
+                    if global_step % division_step == 0:
+                        histograms = {}
+                        for tag, value in net.named_parameters():
+                            tag = tag.replace('/', '.')
+                            if not torch.isinf(value).any():
+                                histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
+                            if not torch.isinf(value.grad).any():
+                                histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
+
+                        val_score = evaluate(net, val_loader, device, experiment, loss_function)
                         # TODO
-                        # print(masks_pred[:, :, 84:, :].shape[2])
-                        # bottom_img_loss = loss_function(masks_pred[:, :, 84:, :], true_masks[:, :, 84:, :]) * 3
-                        # upper_img_loss = loss_function(masks_pred[:, :, 0:84, :], true_masks[:, :, 0:84, :])
-                        # print(masks_pred.shape)
-                        loss = loss_function(masks_pred, true_masks)
-                            #    + dice_loss(F.softmax(masks_pred, dim=1).float(),
-                            #                F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float(),
-                            #                multiclass=True)
-                        # loss = bottom_img_loss + upper_img_loss
-                        # loss = piecewise_loss(masks_pred.squeeze(1), true_masks.float())
-                        # loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
-                        # loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
-                        # loss += dice_loss(masks_pred, true_masks, multiclass=False)
-                        # print("loss on training data is: {0}".format(loss)) #\
-                        # + dice_loss(F.softmax(masks_pred, dim=1).float(),
-                        #         F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float(),
-                        #         multiclass=False)
+                        # scheduler.step(val_score)
+                        logging.info('Validation Dice score: {}'.format(val_score))
+                        experiment.log({
+                            'learning rate': optimizer.param_groups[0]['lr'],
+                            'validation Dice': val_score,
+                            # 'images': wandb.Image(images[0].cpu()),
+                            # 'masks': {
+                            #     'true': wandb.Image(true_masks[0].float().cpu()),
+                            #     'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
+                            # },
+                            'step': global_step,
+                            'epoch': epoch,
+                            **histograms
+                        })
 
-                    optimizer.zero_grad()#set_to_none=True)
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                    # loss.backward()
-                    # optimizer.step()
-                    # a = grad_scaler.scale(loss)
-                    # a.require_grad = True
-                    # a.backward()
-                    # grad_scaler.step(optimizer)
-                    # grad_scaler.update()
-
-                    pbar.update(images.shape[0])
-                    global_step += 1
-                    epoch_loss += loss.item()
-                    experiment.log({
-                        'train loss': loss.item(),
-                        'step': global_step,
-                        'epoch': epoch
-                    })
-                    pbar.set_postfix(**{'loss (batch)': loss.item()})
-                    # TODO??
-                    # Evaluation round
-                    division_step = (n_train // (10 * batch_size))
-                    if division_step > 0:
-                        if global_step % division_step == 0:
-                            histograms = {}
-                            for tag, value in net.named_parameters():
-                                tag = tag.replace('/', '.')
-                                if not torch.isinf(value).any():
-                                    histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
-                                if not torch.isinf(value.grad).any():
-                                    histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
-
-                            val_score = evaluate(net, val_loader, device, experiment, loss_function)
-                            # TODO
-                            # scheduler.step(val_score)
-                            logging.info('Validation Dice score: {}'.format(val_score))
-                            experiment.log({
-                                'learning rate': optimizer.param_groups[0]['lr'],
-                                'validation Dice': val_score,
-                                # 'images': wandb.Image(images[0].cpu()),
-                                # 'masks': {
-                                #     'true': wandb.Image(true_masks[0].float().cpu()),
-                                #     'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
-                                # },
-                                'step': global_step,
-                                'epoch': epoch,
-                                **histograms
-                            })
-
-            if save_checkpoint:
-                Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
-                torch.save(net.state_dict(), str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
-                logging.info(f'Checkpoint {epoch} saved!')
-        wandb.finish()
-        # RESET parameters
-        net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-        net.to(device=device)
+        if save_checkpoint:
+            Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
+            torch.save(net.state_dict(), str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
+            logging.info(f'Checkpoint {epoch} saved!')
+    wandb.finish()
+    # RESET parameters
+    # net = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    # net.to(device=device)
 
 
 def get_args():
@@ -261,7 +261,7 @@ def get_args():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def init_train_process(config=None):
     args = get_args()
 
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -286,17 +286,28 @@ if __name__ == '__main__':
         logging.info(f'Model loaded from {args.load}')
 
     net.to(device=device)
+    experiment = wandb.init(config=config)
+    config = wandb.config
+    print("------------")
+    print(config)
+
     try:
         train_net(net=net,
-                  epochs=args.epochs,
-                  batch_size=args.batch_size,
-                  learning_rate=args.lr,
-                  device=device,
-                  img_scale=args.scale,
-                  val_percent=args.val / 100,
-                  amp=args.amp,
-                  test_optimizers=args.test_optimizers)
+                epochs=config["epochs"],
+                batch_size=config["batch_size"],
+                learning_rate=config["lr"],
+                device=device,
+                img_scale=args.scale,
+                val_percent=args.val / 100,
+                amp=args.amp,
+                test_optimizers=args.test_optimizers,
+                experiment=experiment)
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')
         logging.info('Saved interrupt')
         raise
+
+if __name__ == '__main__':
+    sweep_id = wandb.sweep(sweep_config, project="U-Net sweeps")
+    # experiment = wandb.init(project='U-Net', resume=False, anonymous='must')
+    wandb.agent(sweep_id, init_train_process, count=5)
