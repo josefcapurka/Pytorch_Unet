@@ -29,7 +29,19 @@ torch.set_grad_enabled(True)
 # torch.backends.cudnn.benchmark = True
 # torch.backends.cudnn.deterministic = True
 
-
+sweep_configuration = {
+    'method': 'random',
+    'name': 'sweep',
+    'metric': {
+        'goal': 'minimize',
+        'name': 'validation_loss'
+        },
+    'parameters': {
+        'batch_size': {'values': [1, 2, 4, 8, 16, 32, 64]},
+        'epochs': {'values': [20, 30, 40]},
+        'lr': {'max': 0.1, 'min': 0.0001}
+     }
+}
 
 
 def train_net(net,
@@ -44,7 +56,7 @@ def train_net(net,
               synthetic:bool = False,
               pretrained:str = "",
               test_optimizers:bool = False):
-    
+
     # 1. Create dataset
     if args.synthetic:
         dataset_dir = Path('/home/capurjos/unet_dataset/synthetic_dataset')
@@ -70,12 +82,12 @@ def train_net(net,
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
     # print("test--------------------")
     if test_optimizers:
-        momentum = 0.9
+        momentum = 0.999
         optimizers = [#optim.Adagrad(net.parameters(), lr=0.01),
-                        optim.Adadelta(net.parameters(), lr=1),
-                        optim.Adam(net.parameters(), lr=learning_rate),
-                        optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum = momentum),
-                        optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum)]
+                        # optim.Adadelta(net.parameters(), lr=1),
+                        # optim.Adam(net.parameters(), lr=learning_rate),
+                        optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum = momentum)]
+                        # optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum)]
     # (Initialize logging)
     else:
         optimizers = [optim.Adam(net.parameters(), lr=1e-3)]
